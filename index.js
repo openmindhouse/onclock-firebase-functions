@@ -147,7 +147,18 @@ exports.updateTeam = functions.database.ref('/companies/{company}/users/{user}/i
 
 
 
-exports.newOvertimeRequest = functions.database.ref('/companies/{company}/users/{user}/overtime/{year}/{month}/{day}/{request}')
+/*exports.newOvertimeRequest = functions.database.ref('/companies/{company}/users/{user}/overtime/{year}/{month}/{day}/{request}')
+    .onCreate((snapshot, context) => {
+
+        const company = context.params.company;
+        const user = context.params.user;
+
+        return sendRequestNotification("overtime", "Horas Adicionais", company, user);
+
+    });*/
+
+//alterado, pegar como modelo
+exports.newOvertimeRequest = functions.database.ref('/companies/{company}/overtime/{user}/{year}/{month}/{day}/{request}')
     .onCreate((snapshot, context) => {
 
         const company = context.params.company;
