@@ -196,7 +196,11 @@ exports.newOvertimeRequest = functions.database.ref('/companies/{company}/overti
 
     });
 
-//ALteração em Compensação de Horas do usuário
+
+/*
+    Função acionada para novas solicitações de compensação de horas (notificação)
+    Mário Galvão - 20/10/2018
+*/
 exports.newComptimeRequest = functions.database.ref('/companies/{company}/comptime/{user}/{year}/{month}/{day}/{request}')
     .onCreate((snapshot, context) => {
 
@@ -207,8 +211,12 @@ exports.newComptimeRequest = functions.database.ref('/companies/{company}/compti
 
     });
 
-//ALteração em Faltas do usuário
-exports.newMedicalRequest = functions.database.ref('/companies/{company}/medical/{user}/{year}/{month}/{day}/{request}')
+
+/*
+    Função acionada para novas solicitações de ausência remunerada (notificação)
+    Mário Galvão - 20/10/2018
+*/
+exports.newMedicalRequest = functions.database.ref('/companies/{company}/medical/{user}/{year}/{month}/{day}/{request}')>>>>>>> master
     .onCreate((snapshot, context) => {
 
         const company = context.params.company;
@@ -218,8 +226,12 @@ exports.newMedicalRequest = functions.database.ref('/companies/{company}/medical
 
     });
 
-//ALteração em férias do usuário
-exports.newVacationRequest = functions.database.ref('/companies/{company}/vacation/{user}/{year}/{request}')
+
+/*
+    Função acionada para novas solicitações de férias (notificação)
+    Mário Galvão - 20/10/2018
+*/
+exports.newVacationRequest = functions.database.ref('/companies/{company}/vacation/{user}/{year}/{request}')>>>>>>> master
     .onCreate((snapshot, context) => {
 
         const company = context.params.company;
@@ -311,7 +323,11 @@ function sendRequestNotification(type, typeName, company, user) {
 }
 
 
-//Atualiza notificações de Overtime
+
+/*
+    Função acionada na mudança de status das solicitações de horas adicionais (atualiza acumulado + notificação)
+    Mário Galvão - 21/10/2018
+*/
 exports.overtimeRequestStatusDidChange = functions.database.ref('/companies/{company}/overtime/{user}/{year}/{month}/{day}/{request}/status')
     .onUpdate((change, context) => {
 
@@ -330,6 +346,11 @@ exports.overtimeRequestStatusDidChange = functions.database.ref('/companies/{com
 
     });
 
+
+/*
+    Função acionada na mudança de status das solicitações de compensação de horas (atualiza acumulado + notificação)
+    Mário Galvão - 21/10/2018
+*/
 exports.comptimeRequestStatusDidChange = functions.database.ref('/companies/{company}/comptime/{user}/{year}/{month}/{day}/{request}/statuss')
     .onUpdate((change, context) => {
 
@@ -348,6 +369,12 @@ exports.comptimeRequestStatusDidChange = functions.database.ref('/companies/{com
 
     });
 
+
+
+/*
+    Função acionada na mudança de status das solicitações de ausência remunerada (atualiza acumulado + notificação)
+    Mário Galvão - 21/10/2018
+*/
 exports.medicalRequestStatusDidChange = functions.database.ref('/companies/{company}/medical/{user}/{year}/{month}/{day}/{request}/status')
     .onUpdate((change, context) => {
 
@@ -360,7 +387,13 @@ exports.medicalRequestStatusDidChange = functions.database.ref('/companies/{comp
 
     });
 
+
+/*
+    Função acionada na mudança de status das solicitações de férias (atualiza acumulado + notificação)
+    Mário Galvão - 21/10/2018
+*/
 exports.vacationRequestStatusDidChange = functions.database.ref('/companies/{company}/vacation/{user}/{year}/{request}')
+
     .onUpdate((change, context) => {
 
         const company = context.params.company;
@@ -373,6 +406,103 @@ exports.vacationRequestStatusDidChange = functions.database.ref('/companies/{com
     });
 
 
+
+/*
+    Função para envio de notificação de aprovação
+    Mário Galvão - 21/10/2018
+*/
+function sendApprovalNotification(type, typeName, company, user, oldStatus, newStatus) {
+
+    if (newStatus !== "Aprovado" && newStatus !== "Reprovado") {
+        return;
+    }
+
+    var verb = "";
+
+    if (newStatus === "Aprovado") {
+        verb = "aprovou"
+    } else {
+        verb = "reprovou"
+    }
+
+    var ref1 = admin.database().ref('/companies/' + company + '/users/' + user + '/info');
+    return ref1.once('value').then(function (snapshot2) {
+
+        var data = snapshot2.val();
+
+        const approver = data.approver;
+        const email = data.email;
+        const name = data.name;
+        const fcmTokens = data.fcmTokens;
+        const tokens = Object.keys(fcmTokens);
+        const tokensString = JSON.stringify(fcmTokens);
+
+        var ref2 = admin.database().ref('/companies/' + company + '/users/' + approver + '/info');
+        return ref2.once('value').then(function (snapshot3) {
+
+            var data = snapshot3.val();
+
+            const approverEmail = data.email;
+            const approverName = data.name;
+
+            var ref3 = admin.database().ref('/companies/' + company + '/users/' + user + '/notifications/');
+            return ref3.child('total').once('value').then(function (snapshot4) {
+
+                var badge = snapshot4.val() + 1;
+
+                var ref4 = admin.database().ref('/companies/' + company + '/users/' + approver + '/notifications/approval');
+                ref4.transaction(function (approval) {
+
+                    if (approval) {
+
+                        eval(`if (approval.${type} > 0) { approval.${type}--; }`);
+
+                    }
+
+                    return approval;
+
+                });
+
+                var ref5 = admin.database().ref('/companies/' + company + '/users/' + user + '/notifications/');
+                ref5.transaction(function (notifications) {
+
+                    if (notifications) {
+                        eval(`notifications.${type}++;`);
+                    }
+                    return notifications;
+
+                });
+
+
+                // Notification details.
+                const payload = {
+                    notification: {
+                        title: 'Aprovação',
+                        body: `${approverName} ${verb} sua solicitação de ${typeName}.`,
+                        sound: 'default',
+                        badge: `${badge}`
+                    }
+                };
+
+                return admin.messaging().sendToDevice(tokens, payload)
+                    .then(function (response) {
+
+                        console.log(`Notificação de Aprovação de ${typeName} enviada com sucesso na empresa ${company}". \nOrigem: \n - Nome: ${approverName} \n - E-mail: ${approverEmail} \n - ID: ${approver} \nDestino: \n - Nome: ${name} \n - E-mail: ${email} \n - ID: ${user} \n - fcmToken: ${tokensString}`);
+
+                    })
+                    .catch(function (error) {
+
+                        console.log(`Erro ao enviar notificação de Aprovação de ${typeName} na empresa ${company}. \nOrigem: \n- Nome: ${approverName} \n- E-mail: ${approverEmail} \n- ID: ${approver} \nDestino: \n- Nome: ${name} \n- E-mail: ${email} \n- ID: ${user} \n - fcmToken: ${tokensString} \nErro: ${error}`);
+
+                    });
+
+            });
+
+        });
+
+    });
+
+}
 
 //Quando criado uma empresa, colocar status como ativo, criar history em "billing" e em "company > billing"
 exports.newCompany = functions.database.ref('/companies/{company}/')
@@ -559,14 +689,14 @@ function updateFreeDaysCompany(keyCompany, freeDays){
         
             .then(function (response){
                     
-                    console.log("Novo valor em freedays: " + freeDays + " na empresa: " + keyCompany);
+                  console.log("Novo valor em freedays: " + freeDays + " na empresa: " + keyCompany);
                     
                     
-                }).catch(function (error){
+             }).catch(function (error){
                                         
-                     console.log(`Erro ao decrementar freeDays dentro de Company: ${company} / Erro: ${error}`);
+                  console.log(`Erro ao decrementar freeDays dentro de Company: ${company} / Erro: ${error}`);
                     
-                });
+             });
                         
     }
     
@@ -590,87 +720,11 @@ function setStatusCompany(company, ref, status){
                     console.log(`Erro ao criar estrutura billing com status Ativo criada com sucesso para empresa: ${company}`);
 
                 });
-    
-    
-    
-}
-
-//Descontinuado
-function createBillingHistory(company, ref){
-    
-    var ref2 = admin.database().ref().child("billing").push();
-    
-    var key = ref2.getKey();
-    
-    var date = moment();
-    var initialDate = date.format("YYYY/MM/DD");    
-    var finalDate = date.add(1, "month")
-                        .subtract(1, "day")
-                        .format("YYYY/MM/DD");
-    
-    console.log("Data criação: " + initialDate);
-    
-    var data = {
-        
-        initialDate: initialDate,
-        finalDate: finalDate,
-        company: company        
-        
-    };
-    
-    return ref2.update(data)
-    
-            .then(function (response) {
-
-                        console.log(`Estrutura Billing criada com sucesso para empresa: ${company}`);
-        
-                        //cria company > billing > history    
-                        return createCompanyBillingHistory(company, key, ref, initialDate, finalDate);
-
-                    })
-                    .catch(function (error) {
-
-                        console.log(`Erro ao criar estrutura Billing criada com sucesso para empresa: ${company}`);
-
-                    });  
-
+   
     
 }
 
-//Descontinuado
-function createCompanyBillingHistory(company, key, ref, initialDate, finalDate){
-    
-    console.log(`Criar Billing History na empresa: ${company}, com a chave: ${key}`);
-    
-    var ref2 = ref.child("history").child(key);
-    
-    var data = {
-            initialDate: initialDate,
-            finalDate: finalDate,
-            fullMonth: true,
-            minUsers: 1,
-            paymentStatus: "Gratuito",
-            plan: "-",
-            totalPrice: "-",
-            totalUsers: "-",
-            unitPrice: 0.0
-        
-        };
-        
-        
-        return ref2.update(data)
-                .then(function (response) {
 
-                    console.log(`Estrutura history da empresa: ${company} na chave: ${key} criado com sucesso.`);
-
-                })
-                .catch(function (error) {
-
-                    console.log(`Erro ao criar estrutura billing na empresa: ${company}`);
-
-                });
-    
-} 
 
 //Envio de E-mails de Boas vindas
 exports.getNewCompanyToSendEmail = functions.database.ref('companies/{company}/admin/email')
@@ -701,8 +755,6 @@ exports.getNewCompanyToSendEmail = functions.database.ref('companies/{company}/a
         console.log(`Erro ao pegar nome do usuário: ${name}`);
 
     });
-
-
 
 });
 
@@ -1193,6 +1245,36 @@ function updateComptimeAccumulated(company, user, change, timestamp) {
     var ref1 = change.after.ref.parent;
     return ref1.once('value').then(function (snapshot) {
 
+          const request = snapshot.val();
+
+        })
+        .catch(function (error) {
+
+            console.log(`Acumulado - Erro. Empresa: ${company}. Usuário: ${user}. Tipo: ${type}. Histórico atualizado: ${timestamp}: ${diferenceString}. Erro: ${error}.`);
+
+        });
+
+    });
+
+}
+
+
+/*
+    Função para atualizar o acumulado de compensação de horas
+    Mário Galvão - 22/10/2018
+*/
+function updateComptimeAccumulated(company, user, change, timestamp) {
+
+    const newStatus = change.after.val();
+    const oldStatus = change.before.val();
+
+    if (oldStatus !== "Solicitado" || newStatus !== "Aprovado") {
+        return;
+    }
+
+    var ref1 = change.after.ref.parent;
+    return ref1.once('value').then(function (snapshot) {
+
         const request = snapshot.val();
 
         const initialHourString = request.initialHour;
@@ -1225,7 +1307,6 @@ function updateComptimeAccumulated(company, user, change, timestamp) {
                     console.log(`Acumulado - Erro. Empresa: ${company}. Usuário: ${user}. Tipo: Banco (-). Minutos: ${minutes}. Acumulado anterior: ${timeString}. Novo acumulado: ${newTimeString}. Erro: ${error}.`);
 
                 });
-
 
         });
 
@@ -1337,7 +1418,6 @@ function calculateTimeBySubtractingMinutes(timeString, minutes) {
     //    console.log(`newTimeString: ${newTimeString}.`);
 
     return newTimeString;
-
 
 }
 
