@@ -31,24 +31,23 @@ exports.setNotificationCounters = functions.database.ref('/companies/{company}/u
     .onCreate((snapshot, context) => {
 
         const company = context.params.company;
-        const user = context.params.user;
+         const user = context.params.user;
 
-        var ref = snapshot.ref.child('notifications');
+        //var ref = snapshot.ref.child('notifications');
+        var ref = snapshot.ref;
 
-        var approval = {};
-        approval["overtime"] = 0;
-        approval["comptime"] = 0;
-        approval["medical"] = 0;
-        approval["vacation"] = 0;
+        var data = {};
+        data["notifications/overtime"] = 0;
+        data["notifications/approval/overtime"] = 0;
+        data["notifications/comptime"] = 0;
+        data["notifications/approval/comptime"] = 0;
+        data["notifications/medical"] = 0;
+        data["notifications/approval/medical"] = 0;
+        data["notifications/vacation"] = 0;
+        data["notifications/approval/vacation"] = 0;
+        data["status"] = "Ativo";
 
-        var notifications = {};
-        notifications["overtime"] = 0;
-        notifications["comptime"] = 0;
-        notifications["medical"] = 0;
-        notifications["vacation"] = 0;
-        notifications["approval"] = approval;
-
-        return ref.update(notifications)
+        return ref.update(data)
             .then(function (response) {
 
                 console.log("Estrutura notifications criada com sucesso para usuário ID " + user + " da empresa " + company);
